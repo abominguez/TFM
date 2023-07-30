@@ -1,0 +1,61 @@
+import pandas as pd
+from collections import defaultdict
+import re
+
+def load_excel_data(file_path, sheet_name):
+    excel_file = pd.ExcelFile(file_path)
+    df = pd.read_excel(excel_file, sheet_name)
+    return df
+
+def get_country_activities(country, activities):
+    return [f'{country} - {activity}' for activity in activities]
+
+def distribute_tables(df, activities):
+    tables = defaultdict(list)
+    current_table = None
+    for row in df.itertuples(index=False):
+        if isinstance(row[0], str):
+            for k in activities:
+                if k in row[0]:
+                    current_table = k[:31]  
+                    tables[current_table].append(row)
+        elif current_table and pd.isnull(row[0]):
+            current_table = None
+        elif current_table:
+            tables[current_table].append(row)
+    return tables
+
+def write_tables_to_excel(tables, output_file, activities):
+    with pd.ExcelWriter(output_file, engine='xlsxwriter') as writer:
+        for table_name, table_rows in tables.items():
+            table_df = pd.DataFrame(table_rows)
+            table_df.columns = table_df.iloc[0]
+            table_df = table_df.iloc[1:].reset_index(drop=True)
+
+            activity_name = re.search(r'\b(?:{})\b'.format('|'.join(activities)), table_name, flags=re.IGNORECASE)
+            activity_name = activity_name.group(0) if activity_name else 'Table'
+
+            table_df.to_excel(writer, sheet_name=activity_name, index=False)
+
+if __name__ == "__main__":
+    # Define the file path and sheet name
+    file_path = '../datas/Option_A/Supply and demand series_Time_by_rows.xlsx'
+    sheet_name = '1.Argentina'  
+    output_file = 'output.xlsx' 
+
+    # Define the activities and country_activities with shortened names
+    activities = ['Production', 'Import', 'Export', 'Stock change', 'Unused',
+                  'Total supply', 'Refineries', 'Power plants', 'Self-producers', 'Gas plants',
+                  'Charcoal plants', 'Coke plants and blast furnaces', 'Distilleries', 'Other centers',
+                  'Total transformation', 'Own consumption', 'Losses', 'Adjustment', 'Transport',
+                  'Industrial', 'Residential', 'Commercial, services, public',
+                  'Agriculture, fishing and mining', 'Construction and others',
+                  'Energy consumption', 'Non-energy consumption', 'Final consumption']
+
+    country = "Argentina"
+    country_activities = get_country_activities(country, activities)
+
+    df = load_excel_data(file_path, sheet_name)
+    tables = distribute_tables(df, activities)
+
+    write_tables_to_excel(tables, output_file, activities)
